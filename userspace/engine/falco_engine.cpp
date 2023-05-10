@@ -35,6 +35,7 @@ limitations under the License.
 #include "utils.h"
 #include "banned.h" // This raises a compilation error when certain functions are used
 #include "evttype_index_ruleset.h"
+#include "filter_details_resolver.h"
 
 const std::string falco_engine::s_default_ruleset = "falco-default-ruleset";
 
@@ -427,8 +428,69 @@ void falco_engine::describe_rule(string *rule) const
 	else
 	{
 		auto r = m_rules.at(*rule);
+		if (r == nullptr)
+		{
+			return;
+		}
 		auto str = falco::utils::wrap_text(r->description, 51, 110) + "\n";
 		fprintf(stdout, rule_fmt, r->name.c_str(), str.c_str());
+		
+		auto rule_info = m_rule_collector.rules().at(*rule);
+		auto ast = libsinsp::filter::parser(rule_info->cond).parse();
+		
+		filter_details_resolver resolver;
+		filter_details details;
+		
+		for (const auto& m : m_rule_collector.macros())
+		{
+			details.known_macros.insert(m.name);
+		}
+
+		for (const auto& l : m_rule_collector.lists())
+		{
+			details.known_lists.insert(l.name);
+		}
+
+		resolver.run(ast.get(), details);
+
+		// Get also fields from output
+		auto insp = new sinsp;
+		sinsp_evt_formatter fmt(insp, r->output);
+		delete insp;
+		vector<string> output_fields;
+		fmt.get_field_names(output_fields);
+		for (const auto& f : output_fields)
+		{
+			details.fields.insert(f);
+		}
+
+		cout << "macros: ";
+		for (auto &m : details.macros)
+		{
+			cout << m << " ";
+		}
+		cout << endl;
+
+		cout << "operators: ";
+		for (auto &m : details.operators)
+		{
+			cout << m << " ";
+		}
+		cout << endl;
+
+		cout << "fields: ";
+		for (auto &m : details.fields)
+		{
+			cout << m << " ";
+		}
+		cout << endl;
+
+		cout << "lists: ";
+		for (auto &m : details.lists)
+		{
+			cout << m << " ";
+		}
+		cout << endl;
 	}
 }
 
