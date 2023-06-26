@@ -14,6 +14,10 @@ jobs:
     outputs:
       is_latest: ${{ steps.get_settings.outputs.is_latest }} 
       bucket_suffix: ${{ steps.get_settings.outputs.bucket_suffix }}
+      latest_engine_version: ${{ steps.latest_engine_version.outputs.version }}
+      current_engine_version: ${{ steps.current_engine_version.outputs.version }}
+      latest_fields: ${{ steps.latest_fields.outputs.fields }}
+      current_fields:  ${{ steps.current_fields.outputs.fields }}
     steps:
       - name: Get latest release
         uses: rez0n/actions-github-release@v2.0
@@ -22,6 +26,71 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           type: "stable"
+
+      - name: Get latest release engine version
+        uses: addnab/docker-run-action@v3
+        id: latest_engine_version
+        with:
+          registry: docker.io
+          image: falcosecurity/falco-no-driver:${{ steps.latest_release.outputs.release }}
+          run: |
+            latest_engine_version=$(falco --version -o "json_output=true" | jq .engine_version)
+            echo "latest_engine_version=$latest_engine_version" >> ${'GITHUB_OUTPUT'}
+
+      - name: Get current engine version for this release
+        uses: addnab/docker-run-action@v3
+        id: current_engine_version
+        with:
+          registry: docker.io
+          image: falcosecurity/falco-no-driver:master
+          run: |
+            current_engine_version=$(falco --version -o "json_output=true" | jq .engine_version)
+            echo "current_engine_version=$current_engine_version" >> ${'GITHUB_OUTPUT'}
+
+      - name: Store latest fields
+        uses: addnab/docker-run-action@v3
+        id: current_engine_version
+        with:
+          registry: docker.io
+          image: falcosecurity/falco-no-driver:${{ steps.latest_release.outputs.release }}
+          run: |
+            latest_fields=$(falco --list -N -o "json_output=true")
+            echo "latest_fields=$latest_fields" >> ${'GITHUB_OUTPUT'}
+      
+      - name: Store current fields
+        uses: addnab/docker-run-action@v3
+        id: current_engine_version
+        with:
+          registry: docker.io
+          image: falcosecurity/falco-no-driver:master
+          run: |
+            current_fields=$(falco --list -N -o "json_output=true")
+            echo "current_fields=$current_fields" >> ${'GITHUB_OUTPUT'}
+        
+      - name: Compare engine versions and fields 
+        id: compare_engine_version_fields
+        shell: python
+        run: | 
+          import os 
+          import sys
+          import hashlib
+          
+          latest_engine_version = os.environ['steps.latest_engine_version.outputs.version']
+          current_engine_version = os.environ['steps.current_engine_version.outputs.version']
+          if latest_engine_version != current_engine_version: # bump already took place, safe to continue
+            sys.exit(0)
+
+          latest_engine_version = os.environ['steps.latest_engine_version.outputs.version']
+          current_engine_version = os.environ['steps.current_engine_version.outputs.version']
+
+          latest_fields = os.environ['steps.latest_fields.outputs.fields']
+          current_fields =  os.environ['steps.current_fields.outputs.fields']
+
+          latest_fields_hash = hashlib.sha256(latest_fields.encode('UTF-8')).hexdigest()
+          current_fields_hash = hashlib.sha256(current_fields.encode('UTF-8')).hexdigest()
+
+          if latest_fields_hash != current_fields_hash:
+            sys.exit(1)
 
       - name: Get settings for this release
         id: get_settings
