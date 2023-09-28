@@ -266,6 +266,9 @@ static void read_item(
 
 			// Build proper semver representation
 			v.version = rule_loader::reader::get_implicit_engine_version(ver);
+			
+			cfg.res->add_warning(falco::load_result::warning_code::LOAD_ENGINE_VERSION_NUMERIC_LITERAL,
+				"The required engine version should be converted to a semver string", ctx);
 		} 
 		catch(std::exception& e)
 		{
